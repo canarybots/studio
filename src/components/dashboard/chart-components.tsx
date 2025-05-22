@@ -173,6 +173,8 @@ export const AgeDistributionChart = ({ data }: { data: AgeDistributionData[] }) 
     count: { label: t("ageDistribution"), color: "hsl(var(--chart-5))" },
   } satisfies ChartConfig;
 
+  console.log("data", data);
+
   return (
     <ChartCard title={t("ageDistribution")}>
       <ChartContainer config={chartConfig} className="h-full w-full">

@@ -1,4 +1,3 @@
-
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
@@ -66,10 +65,12 @@ export default function RootLayout({
         >
           <LanguageProvider>
             <AuthProvider>
-              <Suspense fallback={<RootLayoutSkeleton />}>
-                {/* AuthProvider handles routing logic internally based on auth state */}
-                {children}
-              </Suspense>
+              <MainAppLayout>
+                <Suspense fallback={<RootLayoutSkeleton />}>
+                  {/* AuthProvider handles routing logic internally based on auth state */}
+                  {children}
+                </Suspense>
+              </MainAppLayout>
             </AuthProvider>
             <Toaster />
           </LanguageProvider>
