@@ -19,6 +19,7 @@ import type { MonthlyData, TopDataItem, RevenueData, ProfessionalRanking, Gender
 import { Skeleton } from "@/components/ui/skeleton";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Terminal } from "lucide-react";
+import { useAuth } from "@/contexts/auth-context"; // Import useAuth
 import {
   getTotalActivePatients,
   getAppointmentsPerMonth,
@@ -65,6 +66,7 @@ const chartColors = [
 ];
 
 export default function DashboardPage() {
+  const { token, isLoading: authIsLoading } = useAuth(); // Get token from auth context
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -83,6 +85,8 @@ export default function DashboardPage() {
 
   useEffect(() => {
     const fetchDashboardData = async () => {
+      if (!token) return; // Don't fetch if no token
+
       try {
         setLoading(true);
         setError(null);
@@ -119,7 +123,7 @@ export default function DashboardPage() {
         setTopTreatmentsData(
           (topTreatmentsRes || []).map((item, index) => ({ 
             ...item, 
-            id: item.id || String(index), // Ensure id is present
+            id: item.id || String(index), 
             fill: chartColors[index % chartColors.length] 
           }))
         );
@@ -140,7 +144,7 @@ export default function DashboardPage() {
         setMostDemandedSpecialtiesData(
           (demandedSpecialtiesRes || []).map((item, index) => ({ 
             ...item, 
-            id: item.id || String(index), // Ensure id is present
+            id: item.id || String(index), 
             fill: chartColors[index % chartColors.length] 
           }))
         );
@@ -164,17 +168,19 @@ export default function DashboardPage() {
       }
     };
 
-    fetchDashboardData();
-  }, []);
+    if (token && !authIsLoading) { // Fetch data only if token exists and auth is not loading
+      fetchDashboardData();
+    } else if (!authIsLoading && !token) { // If auth finished loading and there's no token, it means user needs to login
+      setLoading(false); // Stop data loading, AuthProvider will redirect
+    }
+  }, [token, authIsLoading]);
   
   const handleFilterChange = (filters: any) => {
     console.log("Filtros aplicados:", filters);
     // TODO: Volver a obtener datos con los filtros aplicados.
-    // Esto implicaría pasar los parámetros de filtro a las funciones de servicio de la API
-    // y luego llamar a fetchDashboardData() nuevamente o una función similar.
   };
 
-  if (loading) {
+  if (authIsLoading || (loading && token)) { // Show skeletons if auth is loading OR if data is loading (and token exists)
     return (
       <div className="flex flex-col gap-6 p-4 md:p-8">
         <DashboardFilters filterOptions={filterOptionsData} onFilterChange={handleFilterChange} />
@@ -188,7 +194,7 @@ export default function DashboardPage() {
     );
   }
 
-  if (error) {
+  if (error && token) { // Show error only if there was an attempt to load data (token existed)
     return (
        <div className="container mx-auto py-8">
         <Alert variant="destructive" className="shadow-lg">
@@ -202,6 +208,18 @@ export default function DashboardPage() {
       </div>
     );
   }
+  
+  // If no token and auth has finished loading, AuthProvider should have redirected.
+  // If we reach here without a token, it's an unexpected state, or the login page itself.
+  // For the dashboard, we expect a token.
+  if (!token && !authIsLoading) {
+    return (
+      <div className="flex min-h-screen items-center justify-center">
+        <p>Redirigiendo a la página de inicio de sesión...</p>
+      </div>
+    );
+  }
+
 
   const currentMonthAppointments = appointmentsPerMonthData.length > 0 ? appointmentsPerMonthData[appointmentsPerMonthData.length - 1]?.appointments : 0;
   const currentMonthCancellations = cancellationsPerMonthData.length > 0 ? cancellationsPerMonthData[cancellationsPerMonthData.length - 1]?.cancellations : 0;

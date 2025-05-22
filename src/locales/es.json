@@ -39,5 +39,22 @@
   "english": "Inglés",
   "spanish": "Español",
   "noData": "No hay datos disponibles",
-  "applyFilters": "Aplicar Filtros"
+  "applyFilters": "Aplicar Filtros",
+  "loginPage": {
+    "title": "¡Bienvenido de Nuevo!",
+    "description": "Inicia sesión para acceder a tu dashboard clínico.",
+    "email": "Correo Electrónico",
+    "password": "Contraseña",
+    "signIn": "Iniciar Sesión",
+    "loading": "Iniciando Sesión...",
+    "showPassword": "Mostrar contraseña",
+    "hidePassword": "Ocultar contraseña",
+    "footerText": "Physio Insights © 2024"
+  },
+  "logout": "Cerrar Sesión",
+  "logoutTooltip": "Cerrar sesión de tu cuenta",
+  "loginSuccessTitle": "Inicio de Sesión Exitoso",
+  "loginSuccessDescription": "¡Bienvenido a Physio Insights!",
+  "loginFailedTitle": "Error al Iniciar Sesión",
+  "loginFailedDescription": "Correo o contraseña incorrectos. Por favor, inténtalo de nuevo."
 }

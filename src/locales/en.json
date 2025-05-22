@@ -39,5 +39,22 @@
   "english": "English",
   "spanish": "Spanish",
   "noData": "No data available",
-  "applyFilters": "Apply Filters"
+  "applyFilters": "Apply Filters",
+  "loginPage": {
+    "title": "Welcome Back!",
+    "description": "Sign in to access your clinical dashboard.",
+    "email": "Email Address",
+    "password": "Password",
+    "signIn": "Sign In",
+    "loading": "Signing In...",
+    "showPassword": "Show password",
+    "hidePassword": "Hide password",
+    "footerText": "Physio Insights © 2024"
+  },
+  "logout": "Logout",
+  "logoutTooltip": "Sign out of your account",
+  "loginSuccessTitle": "Login Successful",
+  "loginSuccessDescription": "Welcome to Physio Insights!",
+  "loginFailedTitle": "Login Failed",
+  "loginFailedDescription": "Invalid email or password. Please try again."
 }

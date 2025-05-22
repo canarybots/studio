@@ -1,3 +1,4 @@
+
 "use client";
 
 import Link from "next/link";
@@ -20,15 +21,17 @@ import {
   SidebarMenu,
   SidebarMenuItem,
   SidebarMenuButton,
-  SidebarSeparator, // Corrected import
+  SidebarSeparator, 
 } from "@/components/ui/sidebar";
 import { SiteLogo } from "@/components/site-logo";
 import { useLanguage } from "@/contexts/language-context";
+import { useAuth } from "@/contexts/auth-context"; // Import useAuth
 import { cn } from "@/lib/utils";
 
 export function AppSidebar() {
   const pathname = usePathname();
   const { t } = useLanguage();
+  const { token, isLoading } = useAuth(); // Get token and isLoading state
 
   const menuItems = [
     { href: "/", label: t("sidebar", "dashboard"), icon: LayoutDashboard },
@@ -41,6 +44,12 @@ export function AppSidebar() {
     { type: "separator" as const },
     { href: "/settings", label: t("sidebar", "settings"), icon: Settings2 },
   ];
+
+  if (isLoading || !token) {
+    // Don't render sidebar if loading auth state or not authenticated
+    // Alternatively, you could show a skeleton or a minimal sidebar
+    return null; 
+  }
 
   return (
     <Sidebar collapsible="icon" variant="sidebar" side="left">
@@ -56,7 +65,7 @@ export function AppSidebar() {
         <SidebarMenu>
           {menuItems.map((item, index) =>
             item.type === "separator" ? (
-              <SidebarSeparator key={`sep-${index}`} className="my-2" /> // Corrected usage
+              <SidebarSeparator key={`sep-${index}`} className="my-2" />
             ) : (
               <SidebarMenuItem key={item.href}>
                 <Link href={item.href} passHref legacyBehavior>

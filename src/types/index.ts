@@ -1,3 +1,4 @@
+
 export interface MonthlyData {
   month: string;
   appointments?: number;
@@ -45,4 +46,23 @@ export interface FilterOptions {
   treatments: { value: string; label: string }[];
   specialties: { value: string; label: string }[];
   confirmationChannels: { value: string; label: string }[];
+}
+
+// Auth Types
+export interface UserCredentials {
+  email: string;
+  password?: string; // Password might be optional if using social logins in future
+  // Add other credential types if needed (e.g., provider, idToken for social logins)
+}
+
+export interface User {
+  id: string;
+  email: string;
+  name?: string;
+  // Add other user properties as needed
+}
+
+export interface UserLoginResponse {
+  token: string;
+  user?: User; // Optional: API might return user details along with token
 }
