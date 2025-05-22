@@ -1,5 +1,28 @@
 
-import type { MonthlyData, TopDataItem, RevenueData, ProfessionalRanking, GenderDistributionData, AgeDistributionData, PeakHoursData, FilterOptions, UserCredentials, UserLoginResponse } from "@/types";
+import type {
+  ApiResponse,
+  MonthlyApptData,
+  MonthlyCancellationData,
+  TopDataItem,
+  RevenueData,
+  ProfessionalRanking,
+  RawGenderAgeDistribution, // Use this for fetching
+  RawPeakHour, // Use this for fetching
+  FilterOptions,
+  UserCredentials,
+  UserLoginResponseData,
+  Paciente,
+  Profesional,
+  Cita,
+  Tratamiento,
+  Especialidad,
+  RawMonthlyTotal,
+  RawMonthlyRate,
+  RawTopTreatment,
+  RawRevenueByTreatment,
+  RawProfessionalRanking,
+  RawSpecialtyDemand,
+} from "@/types";
 
 const urlServer = "https://node-api-clinica-sg-production.up.railway.app";
 
@@ -27,7 +50,6 @@ export const clearAuthToken = () => {
   setAuthToken(null);
 };
 
-// Initialize token from localStorage if available
 if (typeof window !== 'undefined') {
   const storedToken = localStorage.getItem('authToken');
   if (storedToken) {
@@ -35,12 +57,11 @@ if (typeof window !== 'undefined') {
   }
 }
 
-
-async function fetchData<T>(
+async function fetchData<TResponseData>(
   endpoint: string,
   options: RequestInit = {},
   isPublic: boolean = false
-): Promise<T> {
+): Promise<TResponseData> {
   const url = new URL(`${urlServer}${endpoint}`);
   
   const headers = new Headers(options.headers || {});
@@ -60,121 +81,206 @@ async function fetchData<T>(
 
   if (!response.ok) {
     if (response.status === 401 && !isPublic) {
-      // Unauthorized, token might be invalid or expired
       clearAuthToken();
-      // Potentially redirect to login or notify user
       if (typeof window !== 'undefined') {
-         window.location.href = '/login'; // Simple redirect
+         window.location.href = '/login';
       }
     }
     const errorBody = await response.text().catch(() => "Could not read error body");
     console.error(`Error fetching ${endpoint}: ${response.status} ${response.statusText}`, errorBody);
     throw new Error(`Error ${response.status} fetching ${endpoint}: ${response.statusText}`);
   }
-  // Handle cases where response might be empty (e.g. 204 No Content for DELETE)
+
   const contentType = response.headers.get("content-type");
-  if (contentType && contentType.indexOf("application/json") !== -1) {
-    return response.json() as Promise<T>;
+  if (response.status === 204) { // No Content for successful DELETE typically
+    return undefined as unknown as TResponseData;
   }
-  return undefined as unknown as T; // Or handle as Promise<void> or similar
+  if (contentType && contentType.indexOf("application/json") !== -1) {
+    const apiResponse = await response.json() as ApiResponse<TResponseData>;
+    if (apiResponse.status === 'success') {
+      return apiResponse.data;
+    } else {
+      // Handle API-level errors if status is "fail" or "error" even with 2xx HTTP status
+      console.error(`API error for ${endpoint}:`, apiResponse);
+      throw new Error(apiResponse.message || `API request failed for ${endpoint}`);
+    }
+  }
+  return undefined as unknown as TResponseData; 
 }
 
 // Authentication
-export const loginUser = async (credentials: UserCredentials): Promise<UserLoginResponse> => {
-  return fetchData<UserLoginResponse>("/api/auth/login", { // Assuming this is your login endpoint
+export const loginUser = async (credentials: UserCredentials): Promise<UserLoginResponseData> => {
+  // The API response is { status: "success", data: { token: "...", user: {...} } }
+  // fetchData will already extract the content of "data"
+  return fetchData<UserLoginResponseData>("/api/auth/login", {
     method: 'POST',
     body: JSON.stringify(credentials),
-  }, true); // true because login endpoint is public
+  }, true);
 };
 
-
-// Statistics (protected by default)
+// Statistics
 export const getTotalActivePatients = async (): Promise<number> => {
-  const data = await fetchData<{ total: number } | number>("/api/estadisticas/pacientes-activos");
-  return typeof data === 'number' ? data : data.total;
+  const response = await fetchData<{ total: number }>("/api/estadisticas/pacientes-activos");
+  return response.total;
 };
 
-export const getAppointmentsPerMonth = async (): Promise<MonthlyData[]> => {
-  return fetchData<MonthlyData[]>("/api/estadisticas/citas-por-mes");
+export const getAppointmentsPerMonth = async (): Promise<MonthlyApptData[]> => {
+  const response = await fetchData<{ citasPorMes: RawMonthlyTotal[] }>("/api/estadisticas/citas-por-mes");
+  return response.citasPorMes.map(item => ({ month: item.mes, appointments: item.total }));
 };
 
-export const getCancellationsPerMonth = async (): Promise<MonthlyData[]> => {
-  return fetchData<MonthlyData[]>("/api/estadisticas/cancelaciones-por-mes");
+export const getCancellationsPerMonth = async (): Promise<MonthlyCancellationData[]> => {
+  const response = await fetchData<{ cancelacionesPorMes: RawMonthlyTotal[] }>("/api/estadisticas/cancelaciones-por-mes");
+  return response.cancelacionesPorMes.map(item => ({ month: item.mes, cancellations: item.total }));
 };
 
-export const getMonthlyCancellationRate = async (): Promise<number> => {
-  const data = await fetchData<{ tasa: number } | { rate: number } | number>("/api/estadisticas/tasa-cancelacion");
-  if (typeof data === 'number') return data;
-  if (typeof (data as { tasa: number }).tasa === 'number') return (data as { tasa: number }).tasa;
-  if (typeof (data as { rate: number }).rate === 'number') return (data as { rate: number }).rate;
-  return 0; // Fallback
+export const getMonthlyCancellationRate = async (): Promise<RawMonthlyRate[]> => {
+  // Returns array: [{ mes: "2025-05", tasa: 0.12 }, ...]
+  // The page component will need to decide how to use this (e.g., latest month's rate)
+  const response = await fetchData<{ tasaCancelacion: RawMonthlyRate[] }>("/api/estadisticas/tasa-cancelacion");
+  return response.tasaCancelacion; 
 };
 
-export const getTopTreatments = async (): Promise<Omit<TopDataItem, 'fill'>[]> => {
-  return fetchData<Omit<TopDataItem, 'fill'>[]>("/api/estadisticas/tratamientos-mas-solicitados");
+export const getTopTreatments = async (): Promise<Omit<TopDataItem, 'fill' | 'id'>[]> => {
+  const response = await fetchData<{ tratamientosMasSolicitados: RawTopTreatment[] }>("/api/estadisticas/tratamientos-mas-solicitados");
+  return response.tratamientosMasSolicitados.map(item => ({ name: item.nombre, value: item.total }));
 };
 
 export const getRevenueByTreatment = async (): Promise<RevenueData[]> => {
-  return fetchData<RevenueData[]>("/api/estadisticas/ingresos-por-tratamiento");
+  const response = await fetchData<{ ingresosPorTratamiento: RawRevenueByTreatment[] }>("/api/estadisticas/ingresos-por-tratamiento");
+  return response.ingresosPorTratamiento.map(item => ({ name: item.nombre, revenue: item.ingresos }));
 };
 
-export const getProfessionalRanking = async (): Promise<ProfessionalRanking[]> => {
-  return fetchData<ProfessionalRanking[]>("/api/estadisticas/ranking-profesionales");
+export const getProfessionalRanking = async (): Promise<Omit<ProfessionalRanking, 'id'>[]> => {
+  const response = await fetchData<{ rankingProfesionales: RawProfessionalRanking[] }>("/api/estadisticas/ranking-profesionales");
+  return response.rankingProfesionales.map(item => ({ name: item.profesional, appointments: item.total }));
 };
 
-export interface GenderAgeDistributionResponse {
-  distribucionGenero?: Omit<GenderDistributionData, 'fill'>[]; // API might use Spanish key
-  distribucionEdad?: AgeDistributionData[]; // API might use Spanish key
-  genderDistribution?: Omit<GenderDistributionData, 'fill'>[]; // Fallback English key
-  ageDistribution?: AgeDistributionData[]; // Fallback English key
-}
-export const getGenderAndAgeDistribution = async (): Promise<GenderAgeDistributionResponse> => {
-  return fetchData<GenderAgeDistributionResponse>("/api/estadisticas/distribucion-genero-edad");
+export const getGenderAndAgeDistribution = async (): Promise<RawGenderAgeDistribution[]> => {
+  const response = await fetchData<{ distribucion: RawGenderAgeDistribution[] }>("/api/estadisticas/distribucion-genero-edad");
+  return response.distribucion;
 };
 
-export const getMostDemandedSpecialties = async (): Promise<Omit<TopDataItem, 'fill'>[]> => {
-  return fetchData<Omit<TopDataItem, 'fill'>[]>("/api/estadisticas/especialidades-demandadas");
+export const getMostDemandedSpecialties = async (): Promise<Omit<TopDataItem, 'fill' | 'id'>[]> => {
+  const response = await fetchData<{ especialidadesDemandadas: RawSpecialtyDemand[] }>("/api/estadisticas/especialidades-demandadas");
+  return response.especialidadesDemandadas.map(item => ({ name: item.nombre, value: item.total }));
 };
 
-export const getPeakAppointmentHours = async (): Promise<PeakHoursData[]> => {
-  return fetchData<PeakHoursData[]>("/api/estadisticas/horas-pico");
+export const getPeakAppointmentHours = async (): Promise<RawPeakHour[]> => {
+  // Returns [{ hora: "10:00", total: 8 }, ...]
+  // Page component will map this to PeakHoursData (name: hora, value: total)
+  const response = await fetchData<{ horasPico: RawPeakHour[] }>("/api/estadisticas/horas-pico");
+  return response.horasPico;
 };
 
-// CRUD operations will also use fetchData and will be protected by default
 
+// CRUD operations
 // Pacientes
-export const getPatients = async () => fetchData<any[]>('/api/pacientes');
-export const getPatientById = async (id: string) => fetchData<any>(`/api/pacientes/${id}`);
-export const createPatient = async (patientData: any) => fetchData<any>('/api/pacientes', { method: 'POST', body: JSON.stringify(patientData) });
-export const updatePatient = async (id: string, patientData: any) => fetchData<any>(`/api/pacientes/${id}`, { method: 'PATCH', body: JSON.stringify(patientData) });
-export const deletePatient = async (id: string) => fetchData<void>(`/api/pacientes/${id}`, { method: 'DELETE' });
-
+export const getPatients = async (): Promise<Paciente[]> => {
+  const response = await fetchData<{ pacientes: Paciente[] }>('/api/pacientes');
+  return response.pacientes;
+}
+export const getPatientById = async (id: string): Promise<Paciente> => {
+  const response = await fetchData<{ paciente: Paciente }>(`/api/pacientes/${id}`);
+  return response.paciente;
+}
+export const createPatient = async (patientData: Partial<Paciente>): Promise<Paciente> => {
+  const response = await fetchData<{ paciente: Paciente }>('/api/pacientes', { method: 'POST', body: JSON.stringify(patientData) });
+  return response.paciente;
+}
+export const updatePatient = async (id: string, patientData: Partial<Paciente>): Promise<Paciente> => {
+  const response = await fetchData<{ paciente: Paciente }>(`/api/pacientes/${id}`, { method: 'PATCH', body: JSON.stringify(patientData) });
+  return response.paciente;
+}
+export const deletePatient = async (id: string): Promise<void> => {
+  await fetchData<any>(`/api/pacientes/${id}`, { method: 'DELETE' }); // Response: { status, message }
+}
 
 // Profesionales
-export const getProfessionals = async () => fetchData<any[]>('/api/profesionales');
-export const getProfessionalById = async (id: string) => fetchData<any>(`/api/profesionales/${id}`);
-export const createProfessional = async (professionalData: any) => fetchData<any>('/api/profesionales', { method: 'POST', body: JSON.stringify(professionalData) });
-export const updateProfessional = async (id: string, professionalData: any) => fetchData<any>(`/api/profesionales/${id}`, { method: 'PATCH', body: JSON.stringify(professionalData) });
-export const deleteProfessional = async (id: string) => fetchData<void>(`/api/profesionales/${id}`, { method: 'DELETE' });
+export const getProfessionals = async (): Promise<Profesional[]> => {
+  const response = await fetchData<{ profesionales: Profesional[] }>('/api/profesionales');
+  return response.profesionales;
+}
+export const getProfessionalById = async (id: string): Promise<Profesional> => {
+  const response = await fetchData<{ profesional: Profesional }>(`/api/profesionales/${id}`);
+  return response.profesional;
+}
+export const createProfessional = async (professionalData: Partial<Profesional>): Promise<Profesional> => {
+  const response = await fetchData<{ profesional: Profesional }>('/api/profesionales', { method: 'POST', body: JSON.stringify(professionalData) });
+  return response.profesional;
+}
+export const updateProfessional = async (id: string, professionalData: Partial<Profesional>): Promise<Profesional> => {
+  const response = await fetchData<{ profesional: Profesional }>(`/api/profesionales/${id}`, { method: 'PATCH', body: JSON.stringify(professionalData) });
+  return response.profesional;
+}
+export const deleteProfessional = async (id: string): Promise<void> => {
+  await fetchData<any>(`/api/profesionales/${id}`, { method: 'DELETE' });
+}
 
 // Citas
-export const getAppointments = async () => fetchData<any[]>('/api/citas');
-export const getAppointmentById = async (id: string) => fetchData<any>(`/api/citas/${id}`);
-export const createAppointment = async (appointmentData: any) => fetchData<any>('/api/citas', { method: 'POST', body: JSON.stringify(appointmentData) });
-export const updateAppointment = async (id: string, appointmentData: any) => fetchData<any>(`/api/citas/${id}`, { method: 'PATCH', body: JSON.stringify(appointmentData) });
-export const cancelAppointment = async (id: string) => fetchData<any>(`/api/citas/${id}/cancelar`, { method: 'PATCH' });
-export const completeAppointment = async (id: string) => fetchData<any>(`/api/citas/${id}/completar`, { method: 'PATCH' });
+export const getAppointments = async (): Promise<Cita[]> => {
+  const response = await fetchData<{ citas: Cita[] }>('/api/citas');
+  return response.citas;
+}
+export const getAppointmentById = async (id: string): Promise<Cita> => {
+  const response = await fetchData<{ cita: Cita }>(`/api/citas/${id}`);
+  return response.cita;
+}
+export const createAppointment = async (appointmentData: Partial<Cita>): Promise<Cita> => {
+  const response = await fetchData<{ cita: Cita }>('/api/citas', { method: 'POST', body: JSON.stringify(appointmentData) });
+  return response.cita;
+}
+export const updateAppointment = async (id: string, appointmentData: Partial<Cita>): Promise<Cita> => {
+  const response = await fetchData<{ cita: Cita }>(`/api/citas/${id}`, { method: 'PATCH', body: JSON.stringify(appointmentData) });
+  return response.cita;
+}
+export const cancelAppointment = async (id: string): Promise<Cita> => {
+  const response = await fetchData<{ cita: Cita }>(`/api/citas/${id}/cancelar`, { method: 'PATCH' });
+  return response.cita;
+}
+export const completeAppointment = async (id: string): Promise<Cita> => {
+  const response = await fetchData<{ cita: Cita }>(`/api/citas/${id}/completar`, { method: 'PATCH' });
+  return response.cita;
+}
 
 // Tratamientos
-export const getTreatments = async () => fetchData<any[]>('/api/tratamientos');
-export const getTreatmentById = async (id: string) => fetchData<any>(`/api/tratamientos/${id}`);
-export const createTreatment = async (treatmentData: any) => fetchData<any>('/api/tratamientos', { method: 'POST', body: JSON.stringify(treatmentData) });
-export const updateTreatment = async (id: string, treatmentData: any) => fetchData<any>(`/api/tratamientos/${id}`, { method: 'PATCH', body: JSON.stringify(treatmentData) });
-export const deleteTreatment = async (id: string) => fetchData<void>(`/api/tratamientos/${id}`, { method: 'DELETE' });
+export const getTreatments = async (): Promise<Tratamiento[]> => {
+  const response = await fetchData<{ tratamientos: Tratamiento[] }>('/api/tratamientos');
+  return response.tratamientos;
+}
+export const getTreatmentById = async (id: string): Promise<Tratamiento> => {
+  const response = await fetchData<{ tratamiento: Tratamiento }>(`/api/tratamientos/${id}`);
+  return response.tratamiento;
+}
+export const createTreatment = async (treatmentData: Partial<Tratamiento>): Promise<Tratamiento> => {
+  const response = await fetchData<{ tratamiento: Tratamiento }>('/api/tratamientos', { method: 'POST', body: JSON.stringify(treatmentData) });
+  return response.tratamiento;
+}
+export const updateTreatment = async (id: string, treatmentData: Partial<Tratamiento>): Promise<Tratamiento> => {
+  const response = await fetchData<{ tratamiento: Tratamiento }>(`/api/tratamientos/${id}`, { method: 'PATCH', body: JSON.stringify(treatmentData) });
+  return response.tratamiento;
+}
+export const deleteTreatment = async (id: string): Promise<void> => {
+  await fetchData<any>(`/api/tratamientos/${id}`, { method: 'DELETE' });
+}
 
 // Especialidades
-export const getSpecialties = async () => fetchData<any[]>('/api/especialidades');
-export const getSpecialtyById = async (id: string) => fetchData<any>(`/api/especialidades/${id}`);
-export const createSpecialty = async (specialtyData: any) => fetchData<any>('/api/especialidades', { method: 'POST', body: JSON.stringify(specialtyData) });
-export const updateSpecialty = async (id: string, specialtyData: any) => fetchData<any>(`/api/especialidades/${id}`, { method: 'PATCH', body: JSON.stringify(specialtyData) });
-export const deleteSpecialty = async (id: string) => fetchData<void>(`/api/especialidades/${id}`, { method: 'DELETE' });
+export const getSpecialties = async (): Promise<Especialidad[]> => {
+  const response = await fetchData<{ especialidades: Especialidad[] }>('/api/especialidades');
+  return response.especialidades;
+}
+export const getSpecialtyById = async (id: string): Promise<Especialidad> => {
+  const response = await fetchData<{ especialidad: Especialidad }>(`/api/especialidades/${id}`);
+  return response.especialidad;
+}
+export const createSpecialty = async (specialtyData: Partial<Especialidad>): Promise<Especialidad> => {
+  const response = await fetchData<{ especialidad: Especialidad }>('/api/especialidades', { method: 'POST', body: JSON.stringify(specialtyData) });
+  return response.especialidad;
+}
+export const updateSpecialty = async (id: string, specialtyData: Partial<Especialidad>): Promise<Especialidad> => {
+  const response = await fetchData<{ especialidad: Especialidad }>(`/api/especialidades/${id}`, { method: 'PATCH', body: JSON.stringify(specialtyData) });
+  return response.especialidad;
+}
+export const deleteSpecialty = async (id: string): Promise<void> => {
+  await fetchData<any>(`/api/especialidades/${id}`, { method: 'DELETE' });
+}

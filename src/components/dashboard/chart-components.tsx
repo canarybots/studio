@@ -1,3 +1,4 @@
+
 "use client";
 
 import { Bar, BarChart, CartesianGrid, Cell, Legend, Line, LineChart, Pie, PieChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
@@ -5,7 +6,17 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { ChartConfig, ChartContainer, ChartTooltipContent } from "@/components/ui/chart";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { useLanguage } from "@/contexts/language-context";
-import type { MonthlyData, TopDataItem, RevenueData, ProfessionalRanking, GenderDistributionData, AgeDistributionData, PeakHoursData } from "@/types";
+import type { 
+  MonthlyApptData,
+  MonthlyCancellationData,
+  MonthlyData,
+  TopDataItem, 
+  RevenueData, 
+  ProfessionalRanking, 
+  GenderDistributionData, 
+  AgeDistributionData, 
+  PeakHoursData 
+} from "@/types";
 import { cn } from "@/lib/utils";
 
 interface ChartCardProps {
@@ -30,7 +41,7 @@ const ChartCard = ({ title, icon: Icon, children, className }: ChartCardProps) =
 );
 
 // Appointments per Month Chart
-export const AppointmentsPerMonthChart = ({ data }: { data: MonthlyData[] }) => {
+export const AppointmentsPerMonthChart = ({ data }: { data: MonthlyApptData[] }) => {
   const { t } = useLanguage();
   const chartConfig = {
     appointments: { label: t("appointmentsPerMonth"), color: "hsl(var(--chart-1))" },
@@ -53,7 +64,7 @@ export const AppointmentsPerMonthChart = ({ data }: { data: MonthlyData[] }) => 
 };
 
 // Cancellations per Month Chart
-export const CancellationsPerMonthChart = ({ data }: { data: MonthlyData[] }) => {
+export const CancellationsPerMonthChart = ({ data }: { data: MonthlyCancellationData[] }) => {
   const { t } = useLanguage();
   const chartConfig = {
     cancellations: { label: t("cancellationsPerMonth"), color: "hsl(var(--chart-2))" },
@@ -242,7 +253,7 @@ export function TableDisplay<T extends object>({ title, data, columns, icon: Ico
                 <TableRow key={`row-${rowIndex}`}>
                   {columns.map((col) => (
                     <TableCell key={`cell-${rowIndex}-${String(col.key)}`}>
-                      {String(row[col.key])}
+                      {String(row[col.key] ?? 'N/A')}
                     </TableCell>
                   ))}
                 </TableRow>
@@ -254,3 +265,4 @@ export function TableDisplay<T extends object>({ title, data, columns, icon: Ico
     </ChartCard>
   );
 }
+

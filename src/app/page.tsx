@@ -15,11 +15,25 @@ import {
   AppointmentsVsCancellationsChart, 
   TableDisplay 
 } from "@/components/dashboard/chart-components";
-import type { MonthlyData, TopDataItem, RevenueData, ProfessionalRanking, GenderDistributionData, AgeDistributionData, PeakHoursData, FilterOptions } from "@/types";
+import type { 
+  MonthlyApptData,
+  MonthlyCancellationData,
+  MonthlyData,
+  TopDataItem, 
+  RevenueData, 
+  ProfessionalRanking, 
+  GenderDistributionData, 
+  AgeDistributionData, 
+  PeakHoursData, 
+  FilterOptions,
+  RawGenderAgeDistribution,
+  RawPeakHour,
+  RawMonthlyRate
+} from "@/types";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Terminal } from "lucide-react";
-import { useAuth } from "@/contexts/auth-context"; // Import useAuth
+import { useAuth } from "@/contexts/auth-context";
 import {
   getTotalActivePatients,
   getAppointmentsPerMonth,
@@ -33,7 +47,6 @@ import {
   getPeakAppointmentHours,
 } from "@/services/api";
 
-// Mock Filter Options (can be fetched if an endpoint becomes available)
 const filterOptionsData: FilterOptions = {
   professionals: [
     { value: "all", label: "Todos los Profesionales" },
@@ -66,13 +79,13 @@ const chartColors = [
 ];
 
 export default function DashboardPage() {
-  const { token, isLoading: authIsLoading } = useAuth(); // Get token from auth context
+  const { token, isLoading: authIsLoading } = useAuth();
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   const [totalActivePatientsData, setTotalActivePatientsData] = useState<number | null>(null);
-  const [appointmentsPerMonthData, setAppointmentsPerMonthData] = useState<MonthlyData[]>([]);
-  const [cancellationsPerMonthData, setCancellationsPerMonthData] = useState<MonthlyData[]>([]);
+  const [appointmentsPerMonthData, setAppointmentsPerMonthData] = useState<MonthlyApptData[]>([]);
+  const [cancellationsPerMonthData, setCancellationsPerMonthData] = useState<MonthlyCancellationData[]>([]);
   const [monthlyCancellationRateData, setMonthlyCancellationRateData] = useState<number | null>(null);
   const [topTreatmentsData, setTopTreatmentsData] = useState<TopDataItem[]>([]);
   const [revenueByTreatmentData, setRevenueByTreatmentData] = useState<RevenueData[]>([]);
@@ -85,7 +98,7 @@ export default function DashboardPage() {
 
   useEffect(() => {
     const fetchDashboardData = async () => {
-      if (!token) return; // Don't fetch if no token
+      if (!token) return;
 
       try {
         setLoading(true);
@@ -93,68 +106,102 @@ export default function DashboardPage() {
 
         const [
           activePatients,
-          appointmentsMonth,
-          cancellationsMonth,
-          cancellationRate,
-          topTreatmentsRes,
-          revenueByTreatmentRes,
-          profRankingRes,
-          genderAgeDistRes,
-          demandedSpecialtiesRes,
-          peakHoursRes,
+          rawAppointmentsMonth,
+          rawCancellationsMonth,
+          rawCancellationRate,
+          rawTopTreatments,
+          rawRevenueByTreatment,
+          rawProfRanking,
+          rawGenderAgeDist,
+          rawDemandedSpecialties,
+          rawPeakHours,
         ] = await Promise.all([
           getTotalActivePatients(),
           getAppointmentsPerMonth(),
           getCancellationsPerMonth(),
-          getMonthlyCancellationRate(),
+          getMonthlyCancellationRate(), // Returns RawMonthlyRate[]
           getTopTreatments(),
           getRevenueByTreatment(),
           getProfessionalRanking(),
-          getGenderAndAgeDistribution(),
+          getGenderAndAgeDistribution(), // Returns RawGenderAgeDistribution[]
           getMostDemandedSpecialties(),
-          getPeakAppointmentHours(),
+          getPeakAppointmentHours(), // Returns RawPeakHour[]
         ]);
 
         setTotalActivePatientsData(activePatients);
-        setAppointmentsPerMonthData(appointmentsMonth || []);
-        setCancellationsPerMonthData(cancellationsMonth || []);
-        setMonthlyCancellationRateData(cancellationRate);
+        setAppointmentsPerMonthData(rawAppointmentsMonth || []);
+        setCancellationsPerMonthData(rawCancellationsMonth || []);
+        
+        if (rawCancellationRate && rawCancellationRate.length > 0) {
+          // Assuming we want the rate for the most recent month available
+          const latestRate = rawCancellationRate.sort((a, b) => new Date(b.mes).getTime() - new Date(a.mes).getTime())[0];
+          setMonthlyCancellationRateData(latestRate.tasa * 100); // Convert to percentage
+        } else {
+          setMonthlyCancellationRateData(null);
+        }
         
         setTopTreatmentsData(
-          (topTreatmentsRes || []).map((item, index) => ({ 
+          (rawTopTreatments || []).map((item, index) => ({ 
             ...item, 
-            id: item.id || String(index), 
+            id: item.name || String(index), // Use name as ID, ensure it's unique or use index
             fill: chartColors[index % chartColors.length] 
           }))
         );
-        setRevenueByTreatmentData(revenueByTreatmentRes || []);
-        setProfessionalRankingData(profRankingRes || []);
+        setRevenueByTreatmentData(rawRevenueByTreatment || []);
+        setProfessionalRankingData(
+          (rawProfRanking || []).map((item, index) => ({
+            ...item,
+            id: item.name || String(index), // Use name as ID
+          }))
+        );
         
-        const rawGenderData = genderAgeDistRes?.genderDistribution || genderAgeDistRes?.distribucionGenero || [];
-        const rawAgeData = genderAgeDistRes?.ageDistribution || genderAgeDistRes?.distribucionEdad || [];
+        // Process RawGenderAgeDistribution
+        const genderMap: Record<string, number> = {};
+        const ageMap: Record<string, number> = {};
+        (rawGenderAgeDist || []).forEach(item => {
+          genderMap[item.genero] = (genderMap[item.genero] || 0) + item.total;
+          ageMap[item.rango_edad] = (ageMap[item.rango_edad] || 0) + item.total;
+        });
 
         setGenderDistributionData(
-          rawGenderData.map((item, index) => ({ 
-            ...item, 
-            fill: chartColors[index % chartColors.length] 
+          Object.entries(genderMap).map(([name, value], index) => ({
+            name,
+            value,
+            fill: chartColors[index % chartColors.length]
           }))
         );
-        setAgeDistributionData(rawAgeData);
+        setAgeDistributionData(
+          Object.entries(ageMap).map(([age_group, count]) => ({
+            age_group,
+            count
+          }))
+        );
 
         setMostDemandedSpecialtiesData(
-          (demandedSpecialtiesRes || []).map((item, index) => ({ 
+          (rawDemandedSpecialties || []).map((item, index) => ({ 
             ...item, 
-            id: item.id || String(index), 
+            id: item.name || String(index), // Use name as ID
             fill: chartColors[index % chartColors.length] 
           }))
         );
-        setPeakHoursData(peakHoursRes || []);
 
-        if ((appointmentsMonth || []).length > 0) {
-            const vsData = (appointmentsMonth || []).map((ap, i) => ({
-                ...ap,
-                cancellations: (cancellationsMonth || [])[i]?.cancellations || 0,
-            }));
+        setPeakHoursData(
+          (rawPeakHours || []).map(item => ({
+            hour: item.hora,
+            appointments: item.total,
+            day: "N/A" // API doesn't provide day, set to N/A or make optional in type/component
+          }))
+        );
+
+        if ((rawAppointmentsMonth || []).length > 0) {
+            const vsData = (rawAppointmentsMonth || []).map((ap) => {
+                const correspondingCancellation = (rawCancellationsMonth || []).find(c => c.month === ap.month);
+                return {
+                    month: ap.month,
+                    appointments: ap.appointments,
+                    cancellations: correspondingCancellation?.cancellations || 0,
+                };
+            });
             setAppointmentsVsCancellationsData(vsData);
         } else {
             setAppointmentsVsCancellationsData([]);
@@ -168,10 +215,10 @@ export default function DashboardPage() {
       }
     };
 
-    if (token && !authIsLoading) { // Fetch data only if token exists and auth is not loading
+    if (token && !authIsLoading) {
       fetchDashboardData();
-    } else if (!authIsLoading && !token) { // If auth finished loading and there's no token, it means user needs to login
-      setLoading(false); // Stop data loading, AuthProvider will redirect
+    } else if (!authIsLoading && !token) {
+      setLoading(false);
     }
   }, [token, authIsLoading]);
   
@@ -180,7 +227,7 @@ export default function DashboardPage() {
     // TODO: Volver a obtener datos con los filtros aplicados.
   };
 
-  if (authIsLoading || (loading && token)) { // Show skeletons if auth is loading OR if data is loading (and token exists)
+  if (authIsLoading || (loading && token)) {
     return (
       <div className="flex flex-col gap-6 p-4 md:p-8">
         <DashboardFilters filterOptions={filterOptionsData} onFilterChange={handleFilterChange} />
@@ -194,7 +241,7 @@ export default function DashboardPage() {
     );
   }
 
-  if (error && token) { // Show error only if there was an attempt to load data (token existed)
+  if (error && token) {
     return (
        <div className="container mx-auto py-8">
         <Alert variant="destructive" className="shadow-lg">
@@ -209,9 +256,6 @@ export default function DashboardPage() {
     );
   }
   
-  // If no token and auth has finished loading, AuthProvider should have redirected.
-  // If we reach here without a token, it's an unexpected state, or the login page itself.
-  // For the dashboard, we expect a token.
   if (!token && !authIsLoading) {
     return (
       <div className="flex min-h-screen items-center justify-center">
@@ -219,7 +263,6 @@ export default function DashboardPage() {
       </div>
     );
   }
-
 
   const currentMonthAppointments = appointmentsPerMonthData.length > 0 ? appointmentsPerMonthData[appointmentsPerMonthData.length - 1]?.appointments : 0;
   const currentMonthCancellations = cancellationsPerMonthData.length > 0 ? cancellationsPerMonthData[cancellationsPerMonthData.length - 1]?.cancellations : 0;
@@ -265,7 +308,7 @@ export default function DashboardPage() {
         <TableDisplay
           title="Horas Pico de Citas"
           icon={Clock}
-          data={peakHoursData}
+          data={peakHoursData} // This data will have 'day' as "N/A" or undefined
           columns={[
             { key: "day", label: "Día" },
             { key: "hour", label: "Hora" },
@@ -277,3 +320,4 @@ export default function DashboardPage() {
     </div>
   );
 }
+
