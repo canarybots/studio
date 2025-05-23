@@ -1,4 +1,3 @@
-
 "use client";
 
 import { useLanguage } from "@/contexts/language-context";
@@ -33,8 +32,8 @@ export default function PatientsPage() {
   return (
     <div className="container mx-auto py-8">
       <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center justify-between gap-2">
+        <CardHeader className="w-full flex justify-center items-center border-b bg-muted/50">
+          <CardTitle className="w-full flex items-center justify-between gap-2">
             <div className="flex items-center gap-2">
               <Users />
               Gestión de Pacientes

@@ -321,6 +321,7 @@ export const getSpecialties = async (): Promise<Especialidad[]> => {
   const response = await fetchData<{ especialidades: Especialidad[] }>(
     '/api/especialidades'
   );
+  console.log("response", response);
   return response.especialidades;
 };
 export const getSpecialtyById = async (id: string): Promise<Especialidad> => {
